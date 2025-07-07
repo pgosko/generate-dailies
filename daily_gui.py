@@ -10,7 +10,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "dailies-config.yaml")
 DAILY_SCRIPT = os.path.join(os.path.dirname(__file__), "daily3")
 
 class EncodeThread(QtCore.QThread):
-    progress = QtCore.Signal(int, int, str)  # current_frame, total_frames, image_path
+    progress = QtCore.Signal(int, int, str)  # current_frame, total_frames, image_data
     finished = QtCore.Signal(int, str, str)  # returncode, stdout, stderr
 
     def __init__(self, args, env, parent=None):
@@ -45,8 +45,8 @@ class EncodeThread(QtCore.QThread):
             if m:
                 frame = int(m.group(1))
                 total = int(m.group(2))
-                img_path = m.group(3)
-                self.progress.emit(frame, total, img_path)
+                img_data = m.group(3)
+                self.progress.emit(frame, total, img_data)
 
         stdout, stderr = process.communicate()
         self.finished.emit(process.returncode, stdout, stderr)
@@ -200,7 +200,13 @@ class DailyGUI(QtWidgets.QWidget):
         self.input_dim_label.setText(f"Input Dimensions: {dims[0]} x {dims[1]}")
         self.out_width.setValue(dims[0])
         self.out_height.setValue(dims[1])
-        self.update_preview_image(first_image)
+        try:
+            import base64
+            with open(first_image, "rb") as f:
+                img_data = base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            img_data = ""
+        self.update_preview_image(img_data)
 
     def update_output_dim(self):
         if self.input_dimensions:
@@ -226,21 +232,19 @@ class DailyGUI(QtWidgets.QWidget):
             self.out_height.setValue(in_h)
             self.out_width.setValue(int(in_h * aspect))
 
-    def update_preview_image(self, image_path):
+    def update_preview_image(self, image_data):
         try:
-            from PIL import Image
-            import io
-            im = Image.open(image_path)
-            im = im.convert("RGB")
-            im.thumbnail((640, 480))
-            buf = io.BytesIO()
-            im.save(buf, format="JPEG")
-            qimg = QtGui.QImage.fromData(buf.getvalue())
-            pix = QtGui.QPixmap.fromImage(qimg)
-            self.preview_label.setPixmap(pix)
+            import base64
+            img_bytes = base64.b64decode(image_data)
+            pix = QtGui.QPixmap()
+            if pix.loadFromData(img_bytes, "JPEG"):
+                pix = pix.scaled(640, 480, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+                self.preview_label.setPixmap(pix)
+                return
         except Exception:
-            self.preview_label.clear()
-            self.preview_label.setText("Preview not available")
+            pass
+        self.preview_label.clear()
+        self.preview_label.setText("Preview not available")
 
     def generate_daily(self):
         seq_folder = self.seq_folder_edit.text().strip()
@@ -289,11 +293,11 @@ class DailyGUI(QtWidgets.QWidget):
         self.encode_thread.start()
 
     @QtCore.Slot(int, int, str)
-    def on_progress(self, frame, total, img_path):
+    def on_progress(self, frame, total, img_data):
         percent = int((frame / total) * 100) if total else 0
         self.progress_bar.setValue(percent)
         self.status_label.setText(f"Frame {frame}/{total} ({percent}%)")
-        self.update_preview_image(img_path)
+        self.update_preview_image(img_data)
 
     @QtCore.Slot(int, str, str)
     def on_finished(self, retcode, stdout, stderr):

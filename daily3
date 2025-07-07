@@ -356,13 +356,25 @@ class GenerateDaily():
             else:
                 buf.write(os.path.splitext(self.movie_fullpath)[0] + ".{0:05d}.jpg".format(self.frame.frame))
 
+            # --- PATCH START: Generate preview for GUI ---
+            try:
+                import io
+                import base64
+                preview_img = Image.fromarray(pixels)
+                preview_io = io.BytesIO()
+                preview_img.save(preview_io, format="JPEG", quality=80)
+                preview_data = base64.b64encode(preview_io.getvalue()).decode("ascii")
+            except Exception:
+                preview_data = ""
+            # --- PATCH END ---
+
             frame_elapsed_time = datetime.timedelta(seconds=time.time() - frame_start_time)
             log.info("Frame Processing Time: \t{0}".format(frame_elapsed_time))
 
             # --- PATCH START: Print progress for GUI ---
             # Print to stderr: frame_number current_frame total_frames image_path
             print(
-                f"PROGRESS {i} {self.image_sequence.length()} {self.frame.path}",
+                f"PROGRESS {i} {self.image_sequence.length()} {preview_data}",
                 file=sys.stderr,
                 flush=True
             )
