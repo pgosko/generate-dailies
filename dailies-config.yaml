@@ -1,6 +1,6 @@
 globals:
   # Path to the ocio config to use
-  ocioconfig: /af/show/oa/assets/lut/ocio_config/publish/main/lut/v012/bundle/config.ocio
+  ocioconfig: D:\OpenColorIO-Config-ACES-1.2\aces_1.2\config.ocio
   # Default ocio profile to use if not specified on the commandline
   ocio_default_transform: grade
 
@@ -40,19 +40,23 @@ globals:
   filter:
 
   # Output framerate. film=24, hdtv=23.98 = 24000/1001, pal=25, ntsc=30000/1001
-  framerate: 24
+  framerate: 30
 
   # specify a default video filter string to use in ffmpeg.
   # https://trac.ffmpeg.org/wiki/Scaling
   # https://ffmpeg.org/ffmpeg-scaler.html
+
   # Example: "lut3d=${lut},scale=w=${width}:h=${height}:force_original_aspect_ratio=1,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2"
   vf:
   # Choose which output profile to use by default if none specified. See options below.
-  output_codec: h264_hq
+  output_codec: hevc_hq
+
+
   # Movie location is a relative or absolute path for where to place the daily movie
   # For example ../ will place it in the directory above the frames. /place/output will place it here.
-  movie_location: ~/tmp/dailies
+  movie_location: ../output
   movie_ext: mov
+
   # If true, appends "_<codec name>" to the movie file
   movie_append_codec: true
   # All possible input image extensions that will be considered. (Uppercase will automatically be added)
@@ -66,7 +70,7 @@ globals:
 ocio_profiles:
   grade:
     # ocio colorspace conversion: [src_colorspace, dst_colorspace]
-    ociocolorconvert: ["linear", "client_grade"]
+    ociocolorconvert: ["default", "default"]
   show_log:
     ociocolorconvert: ["linear", "REDLog3G10"]
 
