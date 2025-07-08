@@ -34,8 +34,8 @@ class EncodeThread(QtCore.QThread):
                 universal_newlines=True
             )
 
-            # Regex for the PROGRESS line
-            progress_re = re.compile(r'^PROGRESS (\d+) (\d+) (.+)$')
+            # Regex for the PROGRESS line - make the preview data optional
+            progress_re = re.compile(r'^PROGRESS (\d+) (\d+)(?: (.*))?$')
 
             # Read stderr line by line
             while True:
@@ -55,7 +55,7 @@ class EncodeThread(QtCore.QThread):
                     try:
                         frame = int(m.group(1))
                         total = int(m.group(2))
-                        img_data = m.group(3)
+                        img_data = m.group(3) if m.group(3) is not None else ""
                         self.progress.emit(frame, total, img_data)
                     except (ValueError, IndexError) as e:
                         # Skip malformed progress lines
@@ -337,7 +337,10 @@ class DailyGUI(QtWidgets.QWidget):
         self.progress_bar.setValue(0)
         # Clean up temp config
         try:
-            os.unlink(self.encode_thread.env["DAILIES_CONFIG"])
+            if hasattr(self, 'encode_thread') and self.encode_thread and hasattr(self.encode_thread, 'env'):
+                config_path = self.encode_thread.env.get("DAILIES_CONFIG")
+                if config_path:
+                    os.unlink(config_path)
         except Exception:
             pass
 

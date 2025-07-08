@@ -372,12 +372,20 @@ class GenerateDaily():
             log.info("Frame Processing Time: \t{0}".format(frame_elapsed_time))
 
             # --- PATCH START: Print progress for GUI ---
-            # Print to stderr: frame_number current_frame total_frames image_path
-            print(
-                f"PROGRESS {i} {self.image_sequence.length()} {preview_data}",
-                file=sys.stderr,
-                flush=True
-            )
+            # Print to stderr: current_frame total_frames preview_data
+            try:
+                print(
+                    f"PROGRESS {i} {self.image_sequence.length()} {preview_data}",
+                    file=sys.stderr,
+                    flush=True
+                )
+            except Exception as e:
+                # Fallback: print progress without preview data if formatting fails
+                print(
+                    f"PROGRESS {i} {self.image_sequence.length()} ",
+                    file=sys.stderr,
+                    flush=True
+                )
             # --- PATCH END ---
 
         if not DEBUG:
