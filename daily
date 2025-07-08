@@ -33,24 +33,11 @@ DEBUG = False
 log = logging.getLogger(__name__)
 
 
-class GenerateDaily:
+class GenerateDaily():
 
-    def __init__(self, argv=None, progress_callback=None):
-        """Create a GenerateDaily instance.
-
-        Parameters
-        ----------
-        argv : list[str] or None
-            Command line arguments (excluding the program name).  If ``None``
-            the arguments will be parsed from ``sys.argv``.
-        progress_callback : callable or None
-            Optional callback invoked for each processed frame as
-            ``callback(current, total, preview_data)``.  When ``None`` the
-            class prints progress information to ``stderr``.
-        """
+    def __init__(self):
         self.start_time = time.time()
         self.setup_success = False
-        self.progress_callback = progress_callback
 
         # Parse Config File
         DAILIES_CONFIG = os.getenv("DAILIES_CONFIG")
@@ -85,15 +72,12 @@ class GenerateDaily:
         parser.add_argument("--ocio", help="OCIO Colorspace Conversion to use. Specified in the dailies config under ocio_profiles.\n{0}".format(" ".join(ocio_profiles.keys())))
         parser.add_argument("-d", "--debug", help="Set debug to true.", action="store_true")
 
-        if argv is None:
-            argv = sys.argv[1:]
-
-        # Show help if no arguments were supplied
-        if not argv:
+        # Show help if no args.
+        if len(sys.argv)==1:
             parser.print_help()
-            return
+            return None
 
-        args = parser.parse_args(argv)
+        args = parser.parse_args()
 
         input_path = args.input_path
         codec = args.codec
@@ -349,14 +333,9 @@ class GenerateDaily:
                 )
 
         # Loop through every frame, passing the result to the ffmpeg subprocess
-        total_frames = self.image_sequence.length()
         for i, self.frame in enumerate(self.image_sequence, 1):
 
-            log.info(
-                "Processing frame {0:04d}: \t{1:04d} of {2:04d}".format(
-                    self.frame.frame, i, total_frames
-                )
-            )
+            log.info("Processing frame {0:04d}: \t{1:04d} of {2:04d}".format(self.frame.frame, i, self.image_sequence.length()))
             frame_start_time = time.time()
 
             buf = self.process_frame(self.frame)
@@ -392,15 +371,14 @@ class GenerateDaily:
             frame_elapsed_time = datetime.timedelta(seconds=time.time() - frame_start_time)
             log.info("Frame Processing Time: \t{0}".format(frame_elapsed_time))
 
-            # Report progress to callback or stderr for GUI integration
-            if self.progress_callback:
-                self.progress_callback(i, total_frames, preview_data)
-            else:
-                print(
-                    f"PROGRESS {i} {total_frames} {preview_data}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+            # --- PATCH START: Print progress for GUI ---
+            # Print to stderr: frame_number current_frame total_frames image_path
+            print(
+                f"PROGRESS {i} {self.image_sequence.length()} {preview_data}",
+                file=sys.stderr,
+                flush=True
+            )
+            # --- PATCH END ---
 
         if not DEBUG:
             result, error = ffproc.communicate()
