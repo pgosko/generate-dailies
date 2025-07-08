@@ -7,7 +7,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "dailies-config.yaml")
-DAILY_SCRIPT = os.path.join(os.path.dirname(__file__), "daily3")
+DAILY_SCRIPT = os.path.join(os.path.dirname(__file__), "daily")
 
 class EncodeThread(QtCore.QThread):
     progress = QtCore.Signal(int, int, str)  # current_frame, total_frames, image_data
