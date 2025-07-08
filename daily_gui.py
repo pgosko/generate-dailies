@@ -1,8 +1,9 @@
 import sys
 import os
 import yaml
-import subprocess
 import tempfile
+
+import daily as daily_module
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
@@ -10,46 +11,31 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "dailies-config.yaml")
 DAILY_SCRIPT = os.path.join(os.path.dirname(__file__), "daily")
 
 class EncodeThread(QtCore.QThread):
-    progress = QtCore.Signal(int, int, str)  # current_frame, total_frames, image_data
-    finished = QtCore.Signal(int, str, str)  # returncode, stdout, stderr
+    """Run the daily generation in a worker thread."""
 
-    def __init__(self, args, env, parent=None):
+    progress = QtCore.Signal(int, int, str)
+    finished = QtCore.Signal(bool, str)
+
+    def __init__(self, argv, env, parent=None):
         super().__init__(parent)
-        self.args = args
+        self.argv = argv
         self.env = env
 
     def run(self):
-        import re
-        process = subprocess.Popen(
-            self.args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=self.env,
-            text=True,
-            bufsize=1
-        )
+        original_env = os.environ.copy()
+        os.environ.update(self.env)
 
-        # Regex for the PROGRESS line
-        progress_re = re.compile(r'^PROGRESS (\d+) (\d+) (.+)$')
+        def cb(frame, total, img):
+            self.progress.emit(frame, total, img)
 
-        # Read stderr line by line
-        while True:
-            line = process.stderr.readline()
-            if not line and process.poll() is not None:
-                break
-            if not line:
-                QtCore.QThread.msleep(5)
-                continue
-
-            m = progress_re.match(line.strip())
-            if m:
-                frame = int(m.group(1))
-                total = int(m.group(2))
-                img_data = m.group(3)
-                self.progress.emit(frame, total, img_data)
-
-        stdout, stderr = process.communicate()
-        self.finished.emit(process.returncode, stdout, stderr)
+        try:
+            daily_module.GenerateDaily(argv=self.argv, progress_callback=cb)
+            self.finished.emit(True, "")
+        except Exception as exc:  # pragma: no cover - GUI thread
+            self.finished.emit(False, str(exc))
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
 
 class DailyGUI(QtWidgets.QWidget):
     def __init__(self):
@@ -273,12 +259,9 @@ class DailyGUI(QtWidgets.QWidget):
         yaml.safe_dump(config_copy, temp_config)
         temp_config.close()
 
-        args = [
-            sys.executable, DAILY_SCRIPT, input_file,
-            "-c", codec
-        ]
+        argv = [input_file, "-c", codec]
         if out_folder:
-            args += ["-o", out_folder]
+            argv += ["-o", out_folder]
 
         env = os.environ.copy()
         env["DAILIES_CONFIG"] = temp_config_path
@@ -287,7 +270,7 @@ class DailyGUI(QtWidgets.QWidget):
         self.progress_bar.setValue(0)
         self.generate_btn.setEnabled(False)
 
-        self.encode_thread = EncodeThread(args, env)
+        self.encode_thread = EncodeThread(argv, env)
         self.encode_thread.progress.connect(self.on_progress)
         self.encode_thread.finished.connect(self.on_finished)
         self.encode_thread.start()
@@ -299,15 +282,15 @@ class DailyGUI(QtWidgets.QWidget):
         self.status_label.setText(f"Frame {frame}/{total} ({percent}%)")
         self.update_preview_image(img_data)
 
-    @QtCore.Slot(int, str, str)
-    def on_finished(self, retcode, stdout, stderr):
+    @QtCore.Slot(bool, str)
+    def on_finished(self, success, message):
         self.generate_btn.setEnabled(True)
-        if retcode == 0:
+        if success:
             self.status_label.setText("Success!")
-            QMessageBox.information(self, "Success", "Daily generated successfully!\n\n" + (stdout or ""))
+            QMessageBox.information(self, "Success", "Daily generated successfully!")
         else:
             self.status_label.setText("Failed")
-            QMessageBox.critical(self, "Daily Failed", f"Daily exited with code {retcode}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}")
+            QMessageBox.critical(self, "Daily Failed", message)
         self.progress_bar.setValue(0)
         # Clean up temp config
         try:
