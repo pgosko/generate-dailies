@@ -12,6 +12,7 @@ DAILY_SCRIPT = os.path.join(os.path.dirname(__file__), "daily")
 class EncodeThread(QtCore.QThread):
     progress = QtCore.Signal(int, int, str)  # current_frame, total_frames, image_data
     finished = QtCore.Signal(int, str, str)  # returncode, stdout, stderr
+    started = QtCore.Signal()  # Signal when encoding actually starts
 
     def __init__(self, args, env, parent=None):
         super().__init__(parent)
@@ -20,36 +21,53 @@ class EncodeThread(QtCore.QThread):
 
     def run(self):
         import re
-        process = subprocess.Popen(
-            self.args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=self.env,
-            text=True,
-            bufsize=1
-        )
+        try:
+            self.started.emit()  # Signal that encoding has started
+            
+            process = subprocess.Popen(
+                self.args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self.env,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
 
-        # Regex for the PROGRESS line
-        progress_re = re.compile(r'^PROGRESS (\d+) (\d+) (.+)$')
+            # Regex for the PROGRESS line
+            progress_re = re.compile(r'^PROGRESS (\d+) (\d+) (.+)$')
 
-        # Read stderr line by line
-        while True:
-            line = process.stderr.readline()
-            if not line and process.poll() is not None:
-                break
-            if not line:
-                QtCore.QThread.msleep(5)
-                continue
+            # Read stderr line by line
+            while True:
+                line = process.stderr.readline()
+                if not line and process.poll() is not None:
+                    break
+                if not line:
+                    QtCore.QThread.msleep(10)
+                    continue
 
-            m = progress_re.match(line.strip())
-            if m:
-                frame = int(m.group(1))
-                total = int(m.group(2))
-                img_data = m.group(3)
-                self.progress.emit(frame, total, img_data)
+                line = line.strip()
+                if not line:
+                    continue
 
-        stdout, stderr = process.communicate()
-        self.finished.emit(process.returncode, stdout, stderr)
+                m = progress_re.match(line)
+                if m:
+                    try:
+                        frame = int(m.group(1))
+                        total = int(m.group(2))
+                        img_data = m.group(3)
+                        self.progress.emit(frame, total, img_data)
+                    except (ValueError, IndexError) as e:
+                        # Skip malformed progress lines
+                        continue
+
+            # Get any remaining output
+            stdout, stderr = process.communicate()
+            self.finished.emit(process.returncode, stdout, stderr)
+            
+        except Exception as e:
+            # If there's an error in the thread, emit a failure signal
+            self.finished.emit(-1, "", f"Thread error: {str(e)}")
 
 class DailyGUI(QtWidgets.QWidget):
     def __init__(self):
@@ -288,9 +306,15 @@ class DailyGUI(QtWidgets.QWidget):
         self.generate_btn.setEnabled(False)
 
         self.encode_thread = EncodeThread(args, env)
+        self.encode_thread.started.connect(self.on_encoding_started)
         self.encode_thread.progress.connect(self.on_progress)
         self.encode_thread.finished.connect(self.on_finished)
         self.encode_thread.start()
+
+    @QtCore.Slot()
+    def on_encoding_started(self):
+        self.status_label.setText("Processing frames...")
+        self.progress_bar.setValue(0)
 
     @QtCore.Slot(int, int, str)
     def on_progress(self, frame, total, img_data):
@@ -298,6 +322,8 @@ class DailyGUI(QtWidgets.QWidget):
         self.progress_bar.setValue(percent)
         self.status_label.setText(f"Frame {frame}/{total} ({percent}%)")
         self.update_preview_image(img_data)
+        # Force GUI update to ensure immediate display
+        QtWidgets.QApplication.processEvents()
 
     @QtCore.Slot(int, str, str)
     def on_finished(self, retcode, stdout, stderr):
