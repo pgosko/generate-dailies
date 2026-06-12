@@ -85,7 +85,6 @@ class GenerateDaily():
         self.movie_location = args.output
         texts = args.text
         commandline_ocio_profile = args.color_transform
-        commandline_ocio_profile = args.ocio
         if args.debug:
             print("Setting DEBUG=True!")
             DEBUG = True
@@ -166,9 +165,10 @@ class GenerateDaily():
                 self.globals_config['ocioconfig'] = env_ocio
                 self.ocioconfig = env_ocio
 
-        if not os.path.exists(self.ocioconfig):
-            log.warning("OCIO Config does not exist: \n\t{0}\n\tNo OCIO color transform will be applied".format(
-                self.ocioconfig))
+        if not self.ocioconfig or not os.path.exists(self.ocioconfig):
+            if self.ocioconfig:
+                log.warning("OCIO Config does not exist: \n\t{0}\n\tNo OCIO color transform will be applied".format(
+                    self.ocioconfig))
             self.ocioconfig = None
 
         # Get default ocio transform to use if none is passed by commandline
