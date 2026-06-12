@@ -1,0 +1,219 @@
+# Frame Encoder configuration
+# Encode EXR (and other) image sequences to video with ACES color management.
+
+globals:
+  # ACES OCIO config — set OCIO env var or edit this path.
+  # Download: https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES
+  ocioconfig:
+  ocio_default_transform: aces_rec709
+
+  debug: false
+  cropwidth:
+  cropheight:
+  width: 1920
+  height: 1080
+  fit: true
+  filter:
+  framerate: 24
+  vf:
+  output_codec: hevc_hq
+  movie_location: ../output
+  movie_ext: mov
+  movie_append_codec: true
+  input_image_formats: ['exr', 'tif', 'tiff', 'png', 'jpg', 'jpeg', 'dpx']
+
+###############################################
+# ACES color transforms (OpenColorIO)
+# Requires an ACES OCIO config (ACES 1.2+ / 2.x).
+# Input colorspace is the first value; output display is the second.
+###############################################
+
+ocio_profiles:
+  none:
+    ociocolorconvert:
+
+  # Scene-linear ACES2065-1 (common EXR default) to display spaces
+  aces_rec709:
+    ociocolorconvert: ["ACES2065-1", "Output - Rec.709"]
+  aces_srgb:
+    ociocolorconvert: ["ACES2065-1", "Output - sRGB"]
+  aces_p3:
+    ociocolorconvert: ["ACES2065-1", "Output - P3-D65 ST2084 (PQ)"]
+
+  # ACEScg working space (typical CG/VFX renders)
+  acescg_rec709:
+    ociocolorconvert: ["ACEScg", "Output - Rec.709"]
+  acescg_srgb:
+    ociocolorconvert: ["ACEScg", "Output - sRGB"]
+
+  # ACEScct log grading space
+  acescct_rec709:
+    ociocolorconvert: ["ACEScct", "Output - Rec.709"]
+
+  # Raw linear (no ACES IDT) — use when EXR is already display-referred
+  linear_rec709:
+    ociocolorconvert: ["Utility - Linear - sRGB", "Output - Rec.709"]
+
+###############################################
+# Minimal encode profile — no overlays
+###############################################
+
+dailies_profiles:
+  encode:
+    text_elements:
+
+###############################################
+# Output codecs
+###############################################
+
+output_codecs:
+  hevc_hq:
+    name: hevc_hq
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width: 1920
+    height: 1080
+    fit:
+    framerate:
+    codec: libx265
+    profile: main444-10-intra
+    qscale:
+    preset: medium
+    keyint: 1
+    bframes: 0
+    tune: psnr
+    crf: 13
+    pix_fmt: yuv444p10le
+    vf: colormatrix=bt601:bt709
+    bitdepth: 10
+    vendor:
+    metadata_s:
+    bitrate:
+    movie_ext: mov
+
+  hevc_lq:
+    name: hevc_lq
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width: 1920
+    height: 1080
+    fit:
+    framerate:
+    codec: libx265
+    profile: main10-intra
+    qscale:
+    preset: medium
+    keyint: 1
+    bframes: 0
+    tune: psnr
+    crf: 17
+    pix_fmt: yuv420p10le
+    vf: colormatrix=bt601:bt709
+    bitdepth: 10
+    vendor:
+    metadata_s:
+    bitrate:
+    movie_ext: mov
+
+  prores_422hq:
+    name: prores_422hq
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width:
+    height:
+    fit:
+    framerate:
+    codec: prores_ks
+    profile: 3
+    qscale: 7
+    preset:
+    keyint:
+    bframes:
+    tune:
+    crf:
+    pix_fmt: yuva444p10le
+    vf: colormatrix=bt601:bt709
+    bitdepth: 10
+    vendor: ap10
+    metadata_s: encoder="Apple ProRes 422 HQ"
+    bitrate:
+    movie_ext: mov
+
+  prores_4444:
+    name: prores_4444
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width:
+    height:
+    fit:
+    framerate:
+    codec: prores_ks
+    profile: 4
+    qscale: 5
+    preset:
+    keyint:
+    bframes:
+    tune:
+    crf:
+    pix_fmt: yuva444p10le
+    vf: colormatrix=bt601:bt709
+    bitdepth: 10
+    vendor: ap10
+    metadata_s: encoder="Apple ProRes 4444"
+    bitrate:
+    movie_ext: mov
+
+  avchq:
+    name: avchq
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width: 1920
+    height: 1080
+    fit:
+    framerate:
+    codec: libx264
+    profile: high444
+    qscale:
+    preset: slower
+    keyint: 1
+    bframes: 0
+    tune: film
+    crf: 13
+    pix_fmt: yuv444p10le
+    vf: colormatrix=bt601:bt709
+    bitdepth: 10
+    vendor:
+    metadata_s:
+    bitrate:
+    movie_ext: mov
+
+  mjpeg:
+    name: mjpeg
+    overlay: encode
+    cropwidth:
+    cropheight:
+    width: 1920
+    height: 1080
+    fit:
+    framerate:
+    codec: copy
+    profile:
+    quality: 90
+    qscale:
+    preset:
+    keyint:
+    bframes:
+    tune:
+    crf:
+    pix_fmt:
+    vf:
+    bitdepth: 8
+    vendor:
+    metadata_s:
+    bitrate:
+    movie_ext: mov

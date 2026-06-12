@@ -1,0 +1,5 @@
+OpenImageIO>=2.0
+numpy
+PyYAML
+Pillow
+PySide6

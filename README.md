@@ -1,5 +1,46 @@
 # OpenImageIO / FFMPEG Daily
 
+## Frame Encoder
+
+A focused tool for encoding **EXR frame sequences** (and other image formats) to video with **ACES color management** and a **folder queue**.
+
+### Features
+
+- EXR-first workflow with support for TIFF, PNG, JPEG, DPX
+- ACES OCIO transforms (Rec.709, sRGB, P3, ACEScg, ACEScct)
+- Queue multiple sequence folders and encode them in batch
+- Simple PySide6 GUI with live preview and drag-and-drop
+- CLI for scripted/batch use
+
+### Quick Start
+
+```bash
+pip install -r requirements.txt
+
+# Set your ACES OCIO config (download from OpenColorIO-Config-ACES)
+export OCIO=/path/to/aces/config.ocio
+
+# Launch the GUI
+python frame_encoder_gui.py
+
+# Or encode from the command line
+./frame_encoder /path/to/exr/sequence1 /path/to/exr/sequence2 -o /output -ct acescg_rec709
+```
+
+### ACES Setup
+
+1. Download an [OpenColorIO-Config-ACES](https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES) release
+2. Point `OCIO` at `config.ocio`, or set the path in the GUI
+3. Choose a transform matching your EXR input colorspace:
+   - **aces_rec709** — ACES2065-1 scene-linear EXR → Rec.709
+   - **acescg_rec709** — ACEScg renders → Rec.709
+   - **acescct_rec709** — ACEScct graded content → Rec.709
+   - **none** — skip color transform
+
+Configuration lives in `frame_encoder_config.yaml` (codecs, transforms, resolution defaults).
+
+---
+
 ## Overview
 Daily is a tool to convert scene-linear openexr images into display-referred quicktime movies. It supports uint16 precision and uses OpenColorIO for colorspace conversions. Common dailies movie features like text comments, frame number overlays, slate frames, and shot number overlays are supported. It also supports resize operations, including cropping, scaling, padding, and masking.
 

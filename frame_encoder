@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Frame Encoder CLI — batch-encode frame sequences from a folder queue."""
+
+from __future__ import print_function
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+
+import yaml
+
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+CONFIG_FILE = os.path.join(DIR_PATH, "frame_encoder_config.yaml")
+DAILY_SCRIPT = os.path.join(DIR_PATH, "daily")
+
+
+def load_config():
+    with open(CONFIG_FILE, "r") as handle:
+        config = yaml.safe_load(handle)
+    ocioconfig = config.get("globals", {}).get("ocioconfig") or ""
+    if not ocioconfig:
+        env_ocio = os.environ.get("OCIO", "")
+        if env_ocio:
+            config["globals"]["ocioconfig"] = env_ocio
+    return config
+
+
+def find_first_image(folder, extensions):
+    if not os.path.isdir(folder):
+        return None
+    files = []
+    for name in sorted(os.listdir(folder)):
+        ext = os.path.splitext(name)[1].lstrip(".").lower()
+        if ext in extensions:
+            files.append(os.path.join(folder, name))
+    return files[0] if files else None
+
+
+def build_config(overrides):
+    with open(CONFIG_FILE, "r") as handle:
+        config = yaml.safe_load(handle)
+    for key, value in overrides.items():
+        if value is not None:
+            config["globals"][key] = value
+    config["globals"]["debug"] = False
+    temp = tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".yaml")
+    yaml.safe_dump(config, temp)
+    temp.close()
+    return temp.name
+
+
+def encode_folder(folder, args, config):
+    extensions = config.get("globals", {}).get(
+        "input_image_formats", ["exr", "tif", "tiff", "png", "jpg", "jpeg"]
+    )
+    input_file = find_first_image(folder, extensions)
+    if not input_file:
+        print(f"SKIP: no image sequence in {folder}", file=sys.stderr)
+        return 1
+
+    overrides = {
+        "width": args.width,
+        "height": args.height,
+        "framerate": args.framerate,
+        "fit": args.fit,
+    }
+    if args.ocio:
+        overrides["ocioconfig"] = args.ocio
+
+    temp_config = build_config(overrides)
+    cmd = [
+        sys.executable,
+        DAILY_SCRIPT,
+        input_file,
+        "-c",
+        args.codec,
+        "-p",
+        "encode",
+        "-ct",
+        args.color_transform,
+        "-o",
+        args.output,
+    ]
+
+    env = os.environ.copy()
+    env["DAILIES_CONFIG"] = temp_config
+    if args.ocio:
+        env["OCIO"] = args.ocio
+
+    print(f"Encoding: {folder}")
+    result = subprocess.run(cmd, env=env)
+    os.unlink(temp_config)
+    return result.returncode
+
+
+def main():
+    config = load_config()
+    codecs = list(config.get("output_codecs", {}).keys())
+    profiles = list(config.get("ocio_profiles", {}).keys())
+    default_codec = config.get("globals", {}).get("output_codec", "hevc_hq")
+    default_color = config.get("globals", {}).get("ocio_default_transform", "aces_rec709")
+
+    parser = argparse.ArgumentParser(
+        description="Encode frame sequences (mainly EXR) to video with ACES color management."
+    )
+    parser.add_argument(
+        "folders",
+        nargs="+",
+        help="One or more folders containing frame sequences",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=config.get("globals", {}).get("movie_location", "../output"),
+        help="Output directory for encoded movies",
+    )
+    parser.add_argument(
+        "-c",
+        "--codec",
+        default=default_codec,
+        choices=codecs,
+        help=f"Output codec (default: {default_codec})",
+    )
+    parser.add_argument(
+        "-ct",
+        "--color-transform",
+        default=default_color,
+        choices=profiles,
+        dest="color_transform",
+        help=f"ACES/OCIO transform (default: {default_color})",
+    )
+    parser.add_argument(
+        "--ocio",
+        default=config.get("globals", {}).get("ocioconfig") or os.environ.get("OCIO"),
+        help="Path to ACES OCIO config.ocio",
+    )
+    parser.add_argument("--width", type=int, default=config.get("globals", {}).get("width", 1920))
+    parser.add_argument("--height", type=int, default=config.get("globals", {}).get("height", 1080))
+    parser.add_argument(
+        "--framerate",
+        type=float,
+        default=float(config.get("globals", {}).get("framerate", 24)),
+    )
+    parser.add_argument("--fit", action="store_true", default=config.get("globals", {}).get("fit", True))
+    parser.add_argument("--no-fit", action="store_false", dest="fit")
+
+    args = parser.parse_args()
+
+    if args.color_transform != "none" and not args.ocio:
+        print("Error: --ocio or $OCIO required for color transforms", file=sys.stderr)
+        return 1
+    if args.color_transform != "none" and not os.path.isfile(args.ocio):
+        print(f"Error: OCIO config not found: {args.ocio}", file=sys.stderr)
+        return 1
+
+    failures = 0
+    for folder in args.folders:
+        folder = os.path.normpath(folder)
+        if not os.path.isdir(folder):
+            print(f"SKIP: not a directory: {folder}", file=sys.stderr)
+            failures += 1
+            continue
+        code = encode_folder(folder, args, config)
+        if code != 0:
+            failures += 1
+
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
